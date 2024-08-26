@@ -1,0 +1,345 @@
+require('dotenv').config();
+const express = require('express');
+const path = require('path');
+const axios = require('axios');
+const bodyParser = require('body-parser');
+const moment = require('moment');
+const cors = require('cors');
+const fs = require('fs');
+const mysql = require("mysql2/promise");
+const cookieParser = require('cookie-parser');
+const session = require('express-session');
+const MySQLStore = require('express-mysql-session')(session);
+const multer = require('multer');
+
+const { dbConnection, initializeDatabase } = require('./config/db'); // Updated import
+const authRoutes = require('./routes/auth')(dbConnection); // Pass dbConnection
+
+
+
+
+
+const protect = require('./middleware/auth');
+const isAdmin = require('./middleware/admin');;
+const Counter = require('./models/counter'); // Ensure the correct path to the Counter model
+
+const Transaction = require('./models/transaction');
+const Review = require('./models/review')
+const feedbackRoutes = require('./routes/feedback');
+
+
+
+
+
+const app = express();
+const port = process.env.PORT || 3000;
+const hostname = 'localhost';
+
+// Remove duplicate Order model declaration
+// const Order = mongoose.model('Order', orderSchema);
+
+app.use(bodyParser.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(cors());
+app.use(express.json());
+app.use(cookieParser());
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+    store: new MySQLStore({}, dbConnection), // Ensure proper parentheses usage
+  })
+);
+
+app.use('/api/auth', authRoutes);
+app.use('/api', feedbackRoutes);
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+
+// Middleware to make the session available to templates
+app.use((req, res, next) => {
+  res.locals.user = req.session.userId ? req.session.userId : null;
+  next();
+});
+
+app.set('view engine', 'ejs');
+app.set('views', path.join(__dirname, 'views'));
+app.use(express.static(path.join(__dirname, 'public')));
+
+
+ // Adjust the path as needed
+
+
+
+// Initialize database
+initializeDatabase();
+
+
+// Additional Routes
+app.get('/', (req, res) => res.render('index'));
+app.get('/order', protect, (req, res) => res.render('order'));
+app.get('/pricing', (req, res) => res.render('pricing'));
+app.get('/review', protect, (req, res) => res.render('review'));
+app.get('/sample', (req, res) => res.render('sample'));
+app.get('/login', (req, res) => res.render('login'));
+
+
+
+
+app.get('/contact', (req, res) => res.render('contact'));
+
+
+app.get("/customer", protect, async (req, res) => {
+  if (!req.session.userId) {
+    return res.redirect("/login");
+  }
+
+  try {
+    // Query to fetch orders for the logged-in user
+    const [orders] = await dbConnection.query(
+      'SELECT * FROM orders WHERE userId = ?',
+      [req.session.userId]
+    );
+
+    console.log("Fetched Orders:", orders); // Add this log to check what is fetched
+
+    res.render("customer", { user: req.session.user, orders });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send("Server error");
+  }
+});
+
+
+app.get('/dashboard', async (req, res) => {
+  try {
+    const [transactions] = await dbConnection.query('SELECT * FROM transactions');
+    const [orders] = await dbConnection.query('SELECT * FROM orders');
+    res.render('dashboard', { transactions, orders });
+  } catch (err) {
+    console.error('Error fetching transactions or orders:', err);
+    res.status(500).send('Error fetching transactions or orders');
+  }
+});
+
+
+
+
+
+
+app.get('/paypal-client-id', (req, res) => {
+  res.json({ clientId: process.env.PAYPAL_CLIENT_ID });
+});
+
+
+app.get('/order-summary', (req, res) => {
+  res.render('order-summary', {
+      paypalClientId: process.env.PAYPAL_CLIENT_ID
+  });
+});
+
+ // Multer storage setup
+ const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+      cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+      cb(null, Date.now() + path.extname(file.originalname));
+  }
+});
+
+const upload = multer({ storage: storage });
+
+app.post("/order", protect, upload.array("additionalMaterials", 12), async (req, res) => {
+  if (!req.session.userId) {
+      return res.status(401).send("Unauthorized");
+  }
+
+  try {
+      // Define the orderData object
+      const orderData = {
+          userId: req.session.userId,
+          serviceType: req.body.serviceType,
+          paperType: req.body.paperType,
+          paperDetails: req.body.paperDetails || '',  // Ensure default values for optional fields
+          paperFormat: req.body.paperFormat || '',
+          referenceCount: req.body.referenceCount || 0,
+          academicLevel: req.body.academicLevel || '',
+          pageCount: req.body.pageCount || 1,
+          spacing: req.body.spacing || '',
+          urgency: req.body.urgency || '',
+          additionalInstructions: req.body.additionalInstructions || '',
+          additionalServices: JSON.stringify(req.body.additionalServices || {}),
+          notifications: JSON.stringify(req.body.notifications || {}),
+          email: req.body.email || '',
+          phoneNumber: req.body.phoneNumber || '',
+          fullName: req.body.fullName || '',
+          preferredContactMethod: req.body.preferredContactMethod || '',
+          totalPrice: req.body.totalPrice || 0.00,
+          files: JSON.stringify(req.files.map((file) => file.filename)), // Ensure files are handled properly
+          paymentStatus: "Not Paid",
+      };
+
+      // Insert order into the database
+      const insertOrderQuery = `
+          INSERT INTO orders (userId, serviceType, paperType, paperDetails, paperFormat, referenceCount, academicLevel, pageCount, spacing, urgency, additionalInstructions, additionalServices, notifications, email, phoneNumber, fullName, preferredContactMethod, totalPrice, files, paymentStatus)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+      `;
+
+      // Execute the query with the orderData
+      const result = await dbConnection.query(insertOrderQuery, Object.values(orderData));
+
+      // Get the inserted order's ID
+      const newOrderId = result[0].insertId;
+
+      // Send back the response
+      res.json({ id: newOrderId });
+  } catch (err) {
+      console.error(err);
+      res.status(400).send("Error: " + err);
+  }
+});
+
+
+app.post('/order/update', protect, async (req, res) => {
+  if (!req.session.userId) {
+      return res.status(401).send('Unauthorized');
+  }
+
+  try {
+      const { orderId, ...orderData } = req.body;
+
+      const updateOrderQuery = `
+          UPDATE orders
+          SET serviceType = ?, paperType = ?, paperDetails = ?, paperFormat = ?, referenceCount = ?, academicLevel = ?, pageCount = ?, spacing = ?, urgency = ?, additionalInstructions = ?, additionalServices = ?, notifications = ?, email = ?, phoneNumber = ?, fullName = ?, preferredContactMethod = ?, totalPrice = ?, files = ?, paymentStatus = ?
+          WHERE orderId = ? AND userId = ?;
+      `;
+
+      const result = await dbConnection.query(updateOrderQuery, [...Object.values(orderData), orderId, req.session.userId]);
+
+      if (result[0].affectedRows === 0) {
+          return res.status(404).send('Order not found');
+      }
+
+      res.json({ message: 'Order updated successfully' });
+  } catch (err) {
+      console.error(err);
+      res.status(400).send('Error: ' + err);
+  }
+});
+
+app.post('/order/payment', protect, async (req, res) => {
+  if (!req.session.userId) {
+    return res.status(401).send('Unauthorized');
+  }
+
+  try {
+    const { paypalDetails } = req.body;
+
+    if (paypalDetails) {
+      const paypalTransactionQuery = `
+        INSERT INTO transactions (Amount, TransactionDate, PhoneNumber, paypalDetails)
+        VALUES (?, ?, ?, ?);
+      `;
+
+      const values = [
+        paypalDetails.purchase_units[0].amount.value,
+        new Date(paypalDetails.create_time),
+        paypalDetails.payer.email_address,
+        JSON.stringify(paypalDetails)
+      ];
+
+      await dbConnection.query(paypalTransactionQuery, values);
+    }
+
+    res.json({ message: 'Payment recorded successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(400).send('Error: ' + err);
+  }
+});
+
+
+app.get('/order/:orderId', protect, async (req, res) => {
+  if (!req.session.userId) {
+      return res.status(401).send('Unauthorized');
+  }
+
+  try {
+      const orderId = req.params.orderId;
+
+      // Fetch the order from the database
+      const orderQuery = `SELECT * FROM orders WHERE orderId = ? AND userId = ?`;
+      const [orderRows] = await dbConnection.query(orderQuery, [orderId, req.session.userId]);
+
+      if (orderRows.length === 0) {
+          return res.status(404).send('Order not found');
+      }
+
+      const order = orderRows[0];
+
+      // Parse JSON fields if they are stored as strings
+      if (typeof order.additionalServices === 'string') {
+          order.additionalServices = JSON.parse(order.additionalServices);
+      }
+
+      if (typeof order.notifications === 'string') {
+          order.notifications = JSON.parse(order.notifications);
+      }
+
+      if (typeof order.files === 'string') {
+          order.files = JSON.parse(order.files);
+      }
+
+      // Render the order in the view
+      res.render('customer', { order });
+  } catch (err) {
+      console.error(err);
+      res.status(400).send('Error: ' + err);
+  }
+});
+
+
+
+
+// Endpoint to submit a review
+app.post('/submit-review', async (req, res) => {
+  try {
+    const newReview = new Review({
+      name: req.body.name, // Ensure the backend is expecting these fields
+      location: req.body.location,
+      rating: req.body.rating,
+      review: req.body.review
+    });
+
+    await newReview.save();
+    res.status(200).send('Review submitted successfully!');
+  } catch (err) {
+    console.error(err);
+    res.status(500).send('Error saving review.');
+  }
+});
+
+
+app.listen(port, async () => {
+  try {
+    // Test the connection by running a simple query
+    await dbConnection.query('SELECT 1');
+    console.log('MySQL connected successfully!');
+    console.log(`Server is running on http://${hostname}:${port}`);
+  } catch (err) {
+    console.error('Error connecting to MySQL:', err);
+    process.exit(1);
+  }
+});
+
+// Global Error Handlers
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection:', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+});
