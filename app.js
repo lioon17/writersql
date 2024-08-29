@@ -17,13 +17,9 @@ const { dbConnection, initializeDatabase } = require('./config/db'); // Updated 
 const authRoutes = require('./routes/auth')(dbConnection); // Pass dbConnection
 
 
-
-
-
 const protect = require('./middleware/auth');
 const isAdmin = require('./middleware/admin');
 const Counter = require('./models/counter'); // Ensure the correct path to the Counter model
-
 
 const feedbackRoutes = require('./routes/feedback');
 
