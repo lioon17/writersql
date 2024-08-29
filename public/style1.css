@@ -739,6 +739,7 @@ input[type="submit"]:active {
 }
 
 /* Other existing CSS rules here */
+
 .dashboard {
     display: flex;
     height: 100vh;

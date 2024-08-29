@@ -482,7 +482,7 @@ function changePageCount(delta) {
     updateSummary();
 }
  */
-document.getElementById('paperDetailsForm').addEventListener('submit', async function(event) {
+ document.getElementById('paperDetailsForm').addEventListener('submit', async function(event) {
     event.preventDefault(); // Prevent the default form submission
 
     const formData = new FormData(this);
@@ -494,9 +494,6 @@ document.getElementById('paperDetailsForm').addEventListener('submit', async fun
             orderDetails[key] = value;
         }
     });
-
-    // Save order details in sessionStorage
-    sessionStorage.setItem('orderSummary', JSON.stringify(orderDetails));
 
     // Append additional materials (files) to FormData separately if any
     const additionalMaterialsInput = document.getElementById('additionalMaterials');
@@ -511,13 +508,13 @@ document.getElementById('paperDetailsForm').addEventListener('submit', async fun
     try {
         const response = await fetch('/order', {
             method: 'POST',
-            // Don't set 'Content-Type' header to allow boundary to be set automatically
             body: formData, // Send FormData directly
         });
 
         const data = await response.json();
         if (response.ok) {
-            sessionStorage.setItem('orderId', data._id);
+            sessionStorage.setItem('orderId', data.id); // Save order ID
+            sessionStorage.setItem('orderSummary', JSON.stringify(orderDetails)); // Save order details
             // Redirect to the order summary page
             window.location.href = '/order-summary';
         } else {
@@ -527,6 +524,7 @@ document.getElementById('paperDetailsForm').addEventListener('submit', async fun
         console.error('Error creating order:', error);
     }
 });
+
 
     
 let selectedFiles = []; // Ensure this is defined

@@ -40,17 +40,17 @@
                     <h2>Available Orders</h2>
                     <% if (orders && orders.length > 0) { %>
                         <% orders.forEach(order => { %>
-                            <div class="order-card" data-order-id="<%= order._id %>">
+                            <div class="order-card" data-order-id="<%= order.orderId %>">
                                 <div class="order-summary">
                                     <p>Order ID: <%= order.orderId %></p>
-                                    <p>Urgency: <span id="countdown-<%= order._id %>"></span></p>
+                                    <p>Urgency: <span id="countdown-<%= order.orderId %>"></span></p>
                                     <p>Pages: <%= order.pageCount %></p>
                                     <p>Price: $<%= order.totalPrice %></p>
                                     <% if (order.paymentStatus === 'Not Paid') { %>
                                         <span class="notification not-paid">Not Paid</span>
                                     <% } %>
                                 </div>
-                                <div id="order-details-<%= order._id %>" class="order-full-details hidden">
+                                <div id="order-details-<%= order.orderId %>" class="order-full-details hidden">
                                     <p>Service Type: <%= order.serviceType %></p>
                                     <p>Paper Type: <%= order.paperType %></p>
                                     <p>Subject Area: <%= order.subjectArea %></p>
@@ -65,15 +65,16 @@
                                     <p>Phone Number: <%= order.phoneNumber %></p>
                                     <p>Contact Method: <%= order.preferredContactMethod %></p>
                                     <p>Status: <%= order.status %></p>
+                                    
                                     <div>
                                         <p>Additional Materials:</p>
                                         <ul id="fileList">
-                                            <% if (order.files && order.files.length > 0) { %>
+                                            <% if (Array.isArray(order.files) && order.files.length > 0) { %>
                                                 <% order.files.forEach(file => { %>
                                                     <li><a href="/uploads/<%= file %>" target="_blank"><%= file %></a></li>
                                                 <% }) %>
                                             <% } else { %>
-                                                <li>No additional materials uploaded.</li>
+                                                <li>No files uploaded.</li>
                                             <% } %>
                                         </ul>
                                     </div>
@@ -83,6 +84,8 @@
                     <% } else { %>
                         <p>No available orders found.</p>
                     <% } %>
+                </div>
+                
                 </div>
                 
 
@@ -127,7 +130,7 @@
                                 <% if (transactions && transactions.length > 0) { %>
                                     <% transactions.forEach(transaction => { %>
                                         <tr>
-                                            <td><%= transaction.MpesaReceiptNumber || (transaction.paypalDetails ? transaction.paypalDetails.id : 'N/A') %></td>
+                                            <td><%= transaction.ReferenceCode || 'N/A' %></td> <!-- Adding Reference Code column -->
                                             <td><%= transaction.PhoneNumber || (transaction.paypalDetails ? transaction.paypalDetails.payer.email_address : 'N/A') %></td>
                                             <td><%= transaction.Amount || (transaction.paypalDetails ? transaction.paypalDetails.purchase_units[0].amount.value : 'N/A') %></td>
                                             <td><%= new Date(transaction.TransactionDate || (transaction.paypalDetails ? transaction.paypalDetails.create_time : '')).toLocaleString() %></td>
@@ -135,9 +138,10 @@
                                     <% }) %>
                                 <% } else { %>
                                     <tr>
-                                        <td colspan="4">No transactions available</td>
+                                        <td colspan="5">No transactions available</td> <!-- Adjusted colspan to match the number of columns -->
                                     </tr>
                                 <% } %>
+                                
                             </tbody>
                         </table>
                     </div>
@@ -191,54 +195,58 @@
         });
 
 
+        const orders = <%- JSON.stringify(orders) %>;
+  
+        document.addEventListener('DOMContentLoaded', () => {
+    orders.forEach(order => {
+        const endTime = order.urgency; // This should be a date string or timestamp
+        startCountdown(order.orderId, endTime); // Use order.orderId here
+    });
+});
 
+function startCountdown(orderId, endTime) {
+    const countdownElement = document.getElementById('countdown-' + orderId);
+    if (!countdownElement) {
+        console.error('Countdown element not found for order:', orderId);
+        return;
+    }
 
-        function startCountdown(orderId, endTime) {
-        const countdownElement = document.getElementById('countdown-' + orderId);
-        if (!endTime || isNaN(new Date(endTime).getTime())) {
-            countdownElement.innerHTML = "N/A";
+    // Validate endTime
+    if (!endTime || isNaN(new Date(endTime).getTime())) {
+        countdownElement.innerHTML = "Invalid Date";
+        return;
+    }
+
+    function updateCountdown() {
+        const now = new Date().getTime();
+        const distance = new Date(endTime).getTime() - now;
+
+        if (distance <= 0) {
+            countdownElement.innerHTML = "Time's up!";
+            countdownElement.style.color = 'red'; // Set text color to red
+            clearInterval(intervalId);
+            onCountdownEnd(orderId);
             return;
         }
 
-        function updateCountdown() {
-            const now = new Date().getTime();
-            const distance = new Date(endTime).getTime() - now;
+        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-            if (distance <= 0) {
-                countdownElement.innerHTML = "Time's up!";
-                clearInterval(intervalId);
-                onCountdownEnd(orderId);
-                return;
-            }
-
-            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-            countdownElement.innerHTML = `${days}d ${hours}h ${minutes}m ${seconds}s`;
-        }
-
-        updateCountdown();
-        const intervalId = setInterval(updateCountdown, 1000);
+        countdownElement.innerHTML = `${days}d ${hours}h ${minutes}m ${seconds}s`;
     }
 
-    function onCountdownEnd(orderId) {
-        // Perform additional actions after countdown ends
-        console.log(`Countdown ended for order ${orderId}`);
-        // Example: send a notification or update order status
-        // You can add code here to handle what should happen next
-    }
+    // Initial call
+    updateCountdown();
+    // Update every second
+    const intervalId = setInterval(updateCountdown, 1000);
+}
 
-    // Initialize countdown for each order
-    document.addEventListener('DOMContentLoaded', () => {
-        const orders = <%- JSON.stringify(orders) %>;
-        orders.forEach(order => {
-            // Replace 'order.urgency' with the actual end time of the order
-            const endTime = order.urgency; // This should be a date string or timestamp
-            startCountdown(order._id, endTime);
-        });
-    });
+function onCountdownEnd(orderId) {
+    console.log(`Countdown ended for order ${orderId}`);
+    // Add additional actions here if needed
+}
 
 
 

@@ -6,6 +6,7 @@ const bodyParser = require('body-parser');
 const moment = require('moment');
 const cors = require('cors');
 const fs = require('fs');
+
 const mysql = require("mysql2/promise");
 const cookieParser = require('cookie-parser');
 const session = require('express-session');
@@ -20,10 +21,9 @@ const authRoutes = require('./routes/auth')(dbConnection); // Pass dbConnection
 
 
 const protect = require('./middleware/auth');
-const isAdmin = require('./middleware/admin');;
+const isAdmin = require('./middleware/admin');
 const Counter = require('./models/counter'); // Ensure the correct path to the Counter model
 
-const Transaction = require('./models/transaction');
 const Review = require('./models/review')
 const feedbackRoutes = require('./routes/feedback');
 
@@ -103,7 +103,7 @@ app.get("/customer", protect, async (req, res) => {
       [req.session.userId]
     );
 
-    console.log("Fetched Orders:", orders); // Add this log to check what is fetched
+   
 
     res.render("customer", { user: req.session.user, orders });
   } catch (err) {
@@ -113,19 +113,28 @@ app.get("/customer", protect, async (req, res) => {
 });
 
 
-app.get('/dashboard', async (req, res) => {
+app.get('/dashboard', protect, isAdmin, async (req, res) => {
   try {
-    const [transactions] = await dbConnection.query('SELECT * FROM transactions');
-    const [orders] = await dbConnection.query('SELECT * FROM orders');
-    res.render('dashboard', { transactions, orders });
+      const [transactions] = await dbConnection.query('SELECT * FROM transactions');
+      const [orders] = await dbConnection.query('SELECT * FROM orders');
+
+      // Parse JSON string for the files field
+      orders.forEach(order => {
+        if (typeof order.files === 'string') {
+          try {
+            order.files = JSON.parse(order.files);
+          } catch (e) {
+            order.files = []; // Handle JSON parse error
+          }
+        }
+      });
+
+      res.render('dashboard', { transactions, orders });
   } catch (err) {
-    console.error('Error fetching transactions or orders:', err);
-    res.status(500).send('Error fetching transactions or orders');
+      console.error('Error fetching transactions or orders:', err);
+      res.status(500).send('Error fetching transactions or orders');
   }
 });
-
-
-
 
 
 
@@ -154,81 +163,51 @@ const upload = multer({ storage: storage });
 
 app.post("/order", protect, upload.array("additionalMaterials", 12), async (req, res) => {
   if (!req.session.userId) {
-      return res.status(401).send("Unauthorized");
+    return res.status(401).send("Unauthorized");
   }
 
   try {
-      // Define the orderData object
-      const orderData = {
-          userId: req.session.userId,
-          serviceType: req.body.serviceType,
-          paperType: req.body.paperType,
-          paperDetails: req.body.paperDetails || '',  // Ensure default values for optional fields
-          paperFormat: req.body.paperFormat || '',
-          referenceCount: req.body.referenceCount || 0,
-          academicLevel: req.body.academicLevel || '',
-          pageCount: req.body.pageCount || 1,
-          spacing: req.body.spacing || '',
-          urgency: req.body.urgency || '',
-          additionalInstructions: req.body.additionalInstructions || '',
-          additionalServices: JSON.stringify(req.body.additionalServices || {}),
-          notifications: JSON.stringify(req.body.notifications || {}),
-          email: req.body.email || '',
-          phoneNumber: req.body.phoneNumber || '',
-          fullName: req.body.fullName || '',
-          preferredContactMethod: req.body.preferredContactMethod || '',
-          totalPrice: req.body.totalPrice || 0.00,
-          files: JSON.stringify(req.files.map((file) => file.filename)), // Ensure files are handled properly
-          paymentStatus: "Not Paid",
-      };
+    const files = req.files ? req.files.map((file) => file.filename) : [];
 
-      // Insert order into the database
-      const insertOrderQuery = `
-          INSERT INTO orders (userId, serviceType, paperType, paperDetails, paperFormat, referenceCount, academicLevel, pageCount, spacing, urgency, additionalInstructions, additionalServices, notifications, email, phoneNumber, fullName, preferredContactMethod, totalPrice, files, paymentStatus)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-      `;
+    const orderData = {
+      userId: req.session.userId,
+      serviceType: req.body.serviceType,
+      paperType: req.body.paperType,
+      paperDetails: req.body.paperDetails || '',
+      paperFormat: req.body.paperFormat || '',
+      referenceCount: req.body.referenceCount || 0,
+      academicLevel: req.body.academicLevel || '',
+      pageCount: req.body.pageCount || 1,
+      spacing: req.body.spacing || '',
+      urgency: req.body.urgency || '',
+      additionalInstructions: req.body.additionalInstructions || '',
+      additionalServices: JSON.stringify(req.body.additionalServices || {}),
+      notifications: JSON.stringify(req.body.notifications || {}),
+      email: req.body.email || '',
+      phoneNumber: req.body.phoneNumber || '',
+      fullName: req.body.fullName || '',
+      preferredContactMethod: req.body.preferredContactMethod || '',
+      totalPrice: req.body.totalPrice || 0.00,
+      files: JSON.stringify(files),
+      paymentStatus: "Not Paid",
+    };
 
-      // Execute the query with the orderData
-      const result = await dbConnection.query(insertOrderQuery, Object.values(orderData));
+    const insertOrderQuery = `
+      INSERT INTO orders (userId, serviceType, paperType, paperDetails, paperFormat, referenceCount, academicLevel, pageCount, spacing, urgency, additionalInstructions, additionalServices, notifications, email, phoneNumber, fullName, preferredContactMethod, totalPrice, files, paymentStatus)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    `;
 
-      // Get the inserted order's ID
-      const newOrderId = result[0].insertId;
+    const result = await dbConnection.query(insertOrderQuery, Object.values(orderData));
+    const newOrderId = result[0].insertId;
 
-      // Send back the response
-      res.json({ id: newOrderId });
+    res.json({ id: newOrderId });
   } catch (err) {
-      console.error(err);
-      res.status(400).send("Error: " + err);
+    console.error(err);
+    res.status(400).send("Error: " + err);
   }
 });
 
 
-app.post('/order/update', protect, async (req, res) => {
-  if (!req.session.userId) {
-      return res.status(401).send('Unauthorized');
-  }
-
-  try {
-      const { orderId, ...orderData } = req.body;
-
-      const updateOrderQuery = `
-          UPDATE orders
-          SET serviceType = ?, paperType = ?, paperDetails = ?, paperFormat = ?, referenceCount = ?, academicLevel = ?, pageCount = ?, spacing = ?, urgency = ?, additionalInstructions = ?, additionalServices = ?, notifications = ?, email = ?, phoneNumber = ?, fullName = ?, preferredContactMethod = ?, totalPrice = ?, files = ?, paymentStatus = ?
-          WHERE orderId = ? AND userId = ?;
-      `;
-
-      const result = await dbConnection.query(updateOrderQuery, [...Object.values(orderData), orderId, req.session.userId]);
-
-      if (result[0].affectedRows === 0) {
-          return res.status(404).send('Order not found');
-      }
-
-      res.json({ message: 'Order updated successfully' });
-  } catch (err) {
-      console.error(err);
-      res.status(400).send('Error: ' + err);
-  }
-});
 
 app.post('/order/payment', protect, async (req, res) => {
   if (!req.session.userId) {
@@ -236,25 +215,45 @@ app.post('/order/payment', protect, async (req, res) => {
   }
 
   try {
-    const { paypalDetails } = req.body;
+    const { paypalDetails, orderId } = req.body;
 
-    if (paypalDetails) {
+    if (paypalDetails && orderId) {
+      // Verify the PayPal transaction
+      const verifiedTransaction = await verifyPayPalTransaction(paypalDetails.id);
+
+      if (!verifiedTransaction || verifiedTransaction.status !== 'COMPLETED') {
+        return res.status(400).send('Transaction verification failed');
+      }
+
+      // Insert transaction details into the database
       const paypalTransactionQuery = `
-        INSERT INTO transactions (Amount, TransactionDate, PhoneNumber, paypalDetails)
-        VALUES (?, ?, ?, ?);
+        INSERT INTO transactions (Amount, TransactionDate, PhoneNumber, paypalDetails, ReferenceCode)
+        VALUES (?, ?, ?, ?, ?);
       `;
 
       const values = [
-        paypalDetails.purchase_units[0].amount.value,
-        new Date(paypalDetails.create_time),
-        paypalDetails.payer.email_address,
-        JSON.stringify(paypalDetails)
+        verifiedTransaction.purchase_units[0].amount.value,
+        new Date(verifiedTransaction.create_time),
+        verifiedTransaction.payer.email_address,
+        JSON.stringify(verifiedTransaction),
+        verifiedTransaction.id
       ];
 
       await dbConnection.query(paypalTransactionQuery, values);
-    }
 
-    res.json({ message: 'Payment recorded successfully' });
+      // Update the order payment status
+      const updateOrderQuery = `UPDATE orders SET paymentStatus = 'Paid' WHERE orderId = ?`;
+      const [result] = await dbConnection.query(updateOrderQuery, [orderId]);
+
+      if (result.affectedRows === 0) {
+        console.error(`Order with ID ${orderId} not found or payment status unchanged.`);
+        return res.status(404).send('Order not found or payment status unchanged');
+      }
+
+      res.json({ message: 'Payment recorded successfully' });
+    } else {
+      res.status(400).send('Invalid payment details or order ID');
+    }
   } catch (err) {
     console.error(err);
     res.status(400).send('Error: ' + err);
@@ -262,66 +261,146 @@ app.post('/order/payment', protect, async (req, res) => {
 });
 
 
+
+const PAYPAL_CLIENT_ID = process.env.PAYPAL_CLIENT_ID;
+const PAYPAL_SECRET = process.env.PAYPAL_SECRET;
+const auth = Buffer.from(`${PAYPAL_CLIENT_ID}:${PAYPAL_SECRET}`).toString('base64');
+
+const headers = {
+  'Content-Type': 'application/x-www-form-urlencoded',
+  'Authorization': `Basic ${auth}`,
+};
+
+const PAYPAL_BASE_URL = process.env.PAYPAL_BASE_URL;
+const tokenUrl = `${PAYPAL_BASE_URL}/v1/oauth2/token`;
+
+async function getPayPalAccessToken() {
+  try {
+      const response = await axios.post(tokenUrl, 'grant_type=client_credentials', {
+          headers
+      });
+      return response.data.access_token;
+  } catch (error) {
+      console.error('Error getting PayPal access token:', error.response ? error.response.data : error.message);
+      throw new Error('Could not get PayPal access token');
+  }
+}
+
+// Function to verify PayPal transaction
+const verifyPayPalTransaction = async (transactionId) => {
+  const accessToken = await getPayPalAccessToken();
+
+  try {
+      const response = await axios({
+          url: `https://api-m.sandbox.paypal.com/v2/checkout/orders/${transactionId}`,
+          method: 'get',
+          headers: {
+              'Authorization': `Bearer ${accessToken}`,
+          },
+      });
+
+      return response.data; // Return the verified transaction details
+  } catch (error) {
+      console.error('Error verifying PayPal transaction:', error);
+      throw new Error('Could not verify PayPal transaction');
+  }
+};
+
+
+
+
+
 app.get('/order/:orderId', protect, async (req, res) => {
   if (!req.session.userId) {
-      return res.status(401).send('Unauthorized');
+    return res.status(401).send('Unauthorized');
   }
 
   try {
-      const orderId = req.params.orderId;
+    const orderId = req.params.orderId;
 
-      // Fetch the order from the database
-      const orderQuery = `SELECT * FROM orders WHERE orderId = ? AND userId = ?`;
-      const [orderRows] = await dbConnection.query(orderQuery, [orderId, req.session.userId]);
+    const orderQuery = `SELECT * FROM orders WHERE orderId = ? AND userId = ?`;
+    const [orderRows] = await dbConnection.query(orderQuery, [orderId, req.session.userId]);
 
-      if (orderRows.length === 0) {
-          return res.status(404).send('Order not found');
-      }
+    if (orderRows.length === 0) {
+      return res.status(404).send('Order not found');
+    }
 
-      const order = orderRows[0];
+    const order = orderRows[0];
 
-      // Parse JSON fields if they are stored as strings
-      if (typeof order.additionalServices === 'string') {
-          order.additionalServices = JSON.parse(order.additionalServices);
-      }
+    // Parse JSON fields if they are stored as strings
+    if (typeof order.additionalServices === 'string') {
+      order.additionalServices = JSON.parse(order.additionalServices);
+    }
 
-      if (typeof order.notifications === 'string') {
-          order.notifications = JSON.parse(order.notifications);
-      }
+    if (typeof order.notifications === 'string') {
+      order.notifications = JSON.parse(order.notifications);
+    }
 
-      if (typeof order.files === 'string') {
-          order.files = JSON.parse(order.files);
-      }
+    if (typeof order.files === 'string') {
+      order.files = JSON.parse(order.files);
+    }
 
-      // Render the order in the view
-      res.render('customer', { order });
+    // Render the order in the view
+    res.render('customer', { order });
   } catch (err) {
-      console.error(err);
-      res.status(400).send('Error: ' + err);
+    console.error(err);
+    res.status(400).send('Error: ' + err);
   }
 });
 
 
 
+app.get('/api/orders/:orderId', async (req, res) => {
+  const orderId = req.params.orderId;
 
-// Endpoint to submit a review
-app.post('/submit-review', async (req, res) => {
   try {
-    const newReview = new Review({
-      name: req.body.name, // Ensure the backend is expecting these fields
-      location: req.body.location,
-      rating: req.body.rating,
-      review: req.body.review
-    });
+    const [orderRows] = await dbConnection.query('SELECT * FROM orders WHERE orderId = ?', [orderId]);
 
-    await newReview.save();
+    if (orderRows.length === 0) {
+      return res.status(404).json({ message: 'Order not found' });
+    }
+
+    const order = orderRows[0];
+
+    // Parse JSON fields if they are stored as strings
+    if (typeof order.additionalServices === 'string') {
+      order.additionalServices = JSON.parse(order.additionalServices);
+    }
+
+    if (typeof order.notifications === 'string') {
+      order.notifications = JSON.parse(order.notifications);
+    }
+
+    if (typeof order.files === 'string') {
+      order.files = JSON.parse(order.files);
+    }
+
+    // Send the order details as a JSON response
+    res.json(order);
+  } catch (error) {
+    console.error('Error fetching order:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
+app.post('/submit-review', async (req, res) => {
+  const { name, location, rating, review } = req.body;
+
+  try {
+    const query = `
+      INSERT INTO reviews (name, location, rating, review) 
+      VALUES (?, ?, ?, ?)
+    `;
+
+    const [result] = await dbConnection.execute(query, [name, location, rating, review]);
+
     res.status(200).send('Review submitted successfully!');
   } catch (err) {
     console.error(err);
     res.status(500).send('Error saving review.');
   }
 });
-
 
 app.listen(port, async () => {
   try {

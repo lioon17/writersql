@@ -52,63 +52,62 @@
                     <div id="all-orders" class="orders-tab-content active">
                         <% if (orders && orders.length > 0) { %>
                             <% orders.forEach(order => { %>
-                                    <div class="order-card" onclick="toggleOrderDetails('<%= order._id %>')">
-                                        <div class="order-summary">
-                                            <p>Order ID: <%= order.orderId %></p>
-                                            <p>Urgency: <span id="countdown-<%= order._id %>"></span></p>
-                                            <p>Pages: <%= order.pageCount %></p>
-                                            <p>Price: $<%= order.totalPrice %></p>
-                                            <% if (order.paymentStatus === 'Not Paid') { %>
-                                                <div class="payment-status">
-                                                    <span class="notification not-paid">Not Paid</span>
-                                                    <button class="button-57" role="button" onclick="payOrder('<%= order._id %>')">
-                                                        <span class="text">Pay</span><span>$<%= order.totalPrice %></span>
-                                                    </button>
-                                                </div>
-                                            <% } %>
-                                        </div>
-                                        <div id="order-details-<%= order._id %>" class="order-full-details hidden">
-                                            <p>Service Type: <%= order.serviceType %></p>
-                                            <p>Paper Type: <%= order.paperType %></p>
-                                            <p>Subject Area: <%= order.subjectArea %></p>
-                                            <p>Topic: <%= order.topic %></p>
-                                            <p>Details: <%= order.paperDetails %></p>
-                                            <p>References: <%= order.references %></p>
-                                            <p>Academic Level: <%= order.academicLevel %></p>
-                                            <p>Format: <%= order.paperFormat %></p>
-                                            <p>Spacing: <%= order.spacing %></p>
-                                            <p>Writer Level: <%= order.writerLevel %></p>
-                                            <p>Additional Instructions: <%= order.additionalInstructions %></p>
-                                            <p>Services: <%= Array.isArray(order.additionalServices) ? order.additionalServices.join(', ') : order.additionalServices %></p>
-                                            <p>Notifications: <%= Array.isArray(order.notifications) ? order.notifications.join(', ') : order.notifications %></p>
-                                            <p>Email: <%= order.email %></p>
-                                            <p>Phone Number: <%= order.phoneNumber %></p>
-                                            <p>Contact Method: <%= order.preferredContactMethod %></p>
-                                           
-                                            <div>
-                                                <p>Additional Materials:</p>
-                                                <ul id="fileList">
-                                                    <% 
-                                                        let files = Array.isArray(order.files) ? order.files : JSON.parse(order.files);
-                                                        if (files && files.length > 0) { 
-                                                    %>
-                                                        <% files.forEach(file => { %>
-                                                            <li><a href="/uploads/<%= file %>" target="_blank"><%= file %></a></li>
-                                                        <% }) %>
-                                                    <% } else { %>
-                                                        <li>No files uploaded</li>
-                                                    <% } %>
-                                                </ul>
-                                                
+                                <div class="order-card" onclick="toggleOrderDetails('<%= order.orderId %>')">
+                                    <div class="order-summary">
+                                        <p>Order ID: <%= order.orderId %></p>
+                                        <p>Urgency: <span id="countdown-<%= order.orderId %>"></span></p>
+                                        <p>Pages: <%= order.pageCount %></p>
+                                        <p>Price: $<%= order.totalPrice %></p>
+                                        <% if (order.paymentStatus === 'Not Paid') { %>
+                                            <div class="payment-status">
+                                                <span class="notification not-paid">Not Paid</span>
+                                                <button class="button-57" role="button" onclick="payOrder('<%= order.orderId %>')">
+                                                    <span class="text">Pay</span><span>$<%= order.totalPrice %></span>
+                                                </button>
                                             </div>
+                                        <% } %>
+                                    </div>
+                                    <div id="order-details-<%= order.orderId %>" class="order-full-details hidden">
+                                        <p>Service Type: <%= order.serviceType %></p>
+                                        <p>Paper Type: <%= order.paperType %></p>
+                                        <p>Subject Area: <%= order.subjectArea %></p>
+                                        <p>Topic: <%= order.topic %></p>
+                                        <p>Details: <%= order.paperDetails %></p>
+                                        <p>References: <%= order.references %></p>
+                                        <p>Academic Level: <%= order.academicLevel %></p>
+                                        <p>Format: <%= order.paperFormat %></p>
+                                        <p>Spacing: <%= order.spacing %></p>
+                                        <p>Writer Level: <%= order.writerLevel %></p>
+                                        <p>Additional Instructions: <%= order.additionalInstructions %></p>
+                                        <p>Services: <%= Array.isArray(order.additionalServices) ? order.additionalServices.join(', ') : order.additionalServices %></p>
+                                        <p>Notifications: <%= Array.isArray(order.notifications) ? order.notifications.join(', ') : order.notifications %></p>
+                                        <p>Email: <%= order.email %></p>
+                                        <p>Phone Number: <%= order.phoneNumber %></p>
+                                        <p>Contact Method: <%= order.preferredContactMethod %></p>
+                                       
+                                        <div>
+                                            <p>Additional Materials:</p>
+                                            <ul id="fileList">
+                                                <% 
+                                                    let files = Array.isArray(order.files) ? order.files : JSON.parse(order.files);
+                                                    if (files && files.length > 0) { 
+                                                %>
+                                                    <% files.forEach(file => { %>
+                                                        <li><a href="/uploads/<%= file %>" target="_blank"><%= file %></a></li>
+                                                    <% }) %>
+                                                <% } else { %>
+                                                    <li>No files uploaded</li>
+                                                <% } %>
+                                            </ul>
                                         </div>
                                     </div>
-                              
+                                </div>
                             <% }) %>
                         <% } else { %>
                             <p>No orders found.</p>
                         <% } %>
                     </div>
+                    
 
                     <div id="pending-orders" class="orders-tab-content">
                         <% if (orders && orders.length > 0) { %>
@@ -234,9 +233,6 @@
 
     <script>
 
-        
-
-
         // Make sure orders is defined and available
         const orders = <%- JSON.stringify(orders) %>;
 
@@ -277,17 +273,29 @@
             alert('Referral link copied to clipboard: ' + referralLinkInput.value);
         }
     
-        function payOrder(orderId) {
-            // Fetch the order details by orderId
-            const order = orders.find(order => order._id === orderId);
-            if (order) {
-                // Store order details in session storage
-                sessionStorage.setItem('orderSummary', JSON.stringify(order));
-                // Redirect to the order summary page for payment
-                window.location.href = '/order-summary?orderId=' + orderId;
-            }
+        async function payOrder(orderId) {
+    try {
+        // Fetch the order details from the server
+        const response = await fetch(`/api/orders/${orderId}`);
+        if (!response.ok) {
+            throw new Error('Order not found');
         }
-    
+        const order = await response.json();
+
+        // Store order details in session storage
+        sessionStorage.setItem('orderSummary', JSON.stringify(order));
+
+        // Store the orderId separately
+        sessionStorage.setItem('orderId', orderId);
+
+        // Redirect to the order summary page for payment
+        window.location.href = '/order-summary';
+    } catch (error) {
+        console.error('Error fetching order:', error);
+        alert('Failed to fetch order details');
+    }
+}
+
         document.addEventListener('DOMContentLoaded', () => {
             // Add event listeners to sidebar links
             document.querySelectorAll('.orders-sidebar-menu a').forEach(link => {
@@ -367,50 +375,58 @@
 
       
 
-        function startCountdown(orderId, endTime) {
-        const countdownElement = document.getElementById('countdown-' + orderId);
-        if (!endTime || isNaN(new Date(endTime).getTime())) {
-            countdownElement.innerHTML = "N/A";
+        
+        document.addEventListener('DOMContentLoaded', () => {
+    orders.forEach(order => {
+        const endTime = order.urgency; // This should be a date string or timestamp
+        startCountdown(order.orderId, endTime); // Use order.orderId here
+    });
+});
+
+function startCountdown(orderId, endTime) {
+    const countdownElement = document.getElementById('countdown-' + orderId);
+    if (!countdownElement) {
+        console.error('Countdown element not found for order:', orderId);
+        return;
+    }
+
+    // Validate endTime
+    if (!endTime || isNaN(new Date(endTime).getTime())) {
+        countdownElement.innerHTML = "Invalid Date";
+        return;
+    }
+
+    function updateCountdown() {
+        const now = new Date().getTime();
+        const distance = new Date(endTime).getTime() - now;
+
+        if (distance <= 0) {
+            countdownElement.innerHTML = "Time's up!";
+            countdownElement.style.color = 'red'; // Set text color to red
+            clearInterval(intervalId);
+            onCountdownEnd(orderId);
             return;
         }
 
-        function updateCountdown() {
-            const now = new Date().getTime();
-            const distance = new Date(endTime).getTime() - now;
+        const days = Math.floor(distance / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((distance % (1000 * 60)) / 1000);
 
-            if (distance <= 0) {
-                countdownElement.innerHTML = "Time's up!";
-                countdownElement.style.color = 'red'; // Set text color to red
-                clearInterval(intervalId);
-                onCountdownEnd(orderId);
-                return;
-            }
-
-            const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-            const hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-            const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-            const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-            countdownElement.innerHTML = `${days}d ${hours}h ${minutes}m ${seconds}s`;
-        }
-
-        updateCountdown();
-        const intervalId = setInterval(updateCountdown, 1000);
+        countdownElement.innerHTML = `${days}d ${hours}h ${minutes}m ${seconds}s`;
     }
 
-    function onCountdownEnd(orderId) {
-        console.log(`Countdown ended for order ${orderId}`);
-        // You can add additional actions here if needed
-    }
+    // Initial call
+    updateCountdown();
+    // Update every second
+    const intervalId = setInterval(updateCountdown, 1000);
+}
 
-    // Initialize countdown for each order
-    document.addEventListener('DOMContentLoaded', () => {
-        const orders = <%- JSON.stringify(orders) %>;
-        orders.forEach(order => {
-            const endTime = order.urgency; // This should be a date string or timestamp
-            startCountdown(order._id, endTime);
-        });
-    });
+function onCountdownEnd(orderId) {
+    console.log(`Countdown ended for order ${orderId}`);
+    // Add additional actions here if needed
+}
+
         
     </script>
     
