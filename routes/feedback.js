@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const Feedback = require('../models/feedback');
+const Feedback = require('../models/Feedback'); // ✅ Matches the actual filename
+
 
 // Route to submit feedback
 router.post('/submitFeedback', async (req, res) => {
